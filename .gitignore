@@ -160,9 +160,10 @@ cython_debug/
 #.idea/
 
 # Database
-TestDataset/
-TrainingDataset/
+Test_DB/
+Training_DB/
 UareU_sample_DB/
 CrossMatch_Sample_DB/
 DB1_B/
 DB2_B/
+Fingerprints_DB/
