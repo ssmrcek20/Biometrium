@@ -5,6 +5,13 @@ from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, accuracy_score
 
+def save_processed_image(fingerprint_image, fingerprint_label):
+    fingerprints_folder = './Processed_Fingerprints'
+    if not os.path.exists(fingerprints_folder):
+        os.makedirs(fingerprints_folder)
+
+    cv2.imwrite(os.path.join(fingerprints_folder, fingerprint_label), fingerprint_image)
+
 def process_image(image_path):
     gray_img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     thresholded_image = cv2.threshold(gray_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
@@ -28,6 +35,8 @@ def fingerprints_load(fingerprints_source):
                 label = img_label[0]
                 
             labels.append(label)
+
+            save_processed_image(processed_image, img)
 
     return images, labels
 
