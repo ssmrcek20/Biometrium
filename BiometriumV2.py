@@ -4,12 +4,11 @@ import cv2
 import numpy as np
 import fingerprint_feature_extractor as ffe
 import fingerprint_enhancer as fe
+from sklearn import svm, preprocessing
+from sklearn.multiclass import OneVsRestClassifier
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, accuracy_score
-
-def save_processed_image(fingerprint_image, fingerprint_label, processed_fingerprints_folder):
-    cv2.imwrite(os.path.join(processed_fingerprints_folder, fingerprint_label), fingerprint_image)
 
 def process_image(image_path):
     img = cv2.imread(image_path, 0)
@@ -27,7 +26,7 @@ def fingerprints_load(fingerprints_source, processed_fingerprints_folder):
     for img in os.listdir(fingerprints_source):
         if img.endswith(('.tif')):
             img_source = os.path.join(fingerprints_source, img)
-            processed_image = process_image_2(img_source)
+            processed_image = process_image(img_source)
 
             images.append(processed_image)
 
@@ -39,45 +38,76 @@ def fingerprints_load(fingerprints_source, processed_fingerprints_folder):
                 
             labels.append(label)
 
-            save_processed_image(processed_image, img, processed_fingerprints_folder)
+            cv2.imwrite(os.path.join(processed_fingerprints_folder, img), processed_image)
 
     return images, labels
 
-def main():
-    fingerprints_source = './Fingerprints_DB'
-    if not os.path.exists(fingerprints_source):
-        print("Fingerprint database does not exist.")
-        return
-    
-    processed_fingerprints_folder = './Processed_Fingerprints'
+def create_folders(processed_fingerprints_folder, features_fingerprints_folder):
     if os.path.exists(processed_fingerprints_folder):
         shutil.rmtree(processed_fingerprints_folder)
     os.makedirs(processed_fingerprints_folder)
 
-    fingerprints, labels = fingerprints_load(fingerprints_source,processed_fingerprints_folder)
+    if os.path.exists(features_fingerprints_folder):
+        shutil.rmtree(features_fingerprints_folder)
+    os.makedirs(features_fingerprints_folder)
 
+def save_extracted_fingerprint(features_fingerprints_folder,labels,counter):
+    destination_path = os.path.join(features_fingerprints_folder, f"{labels[counter]}_{counter}.tif")
+    
+    shutil.copy("./result.png", destination_path)
+    os.remove("./result.png")
+
+def extract_features(fingerprints, labels, features_fingerprints_folder):
     features = []
+    counter = 0
 
     for fingerprint in fingerprints:
-        FeaturesTerminations, FeaturesBifurcations = ffe.extract_minutiae_features(fingerprint, spuriousMinutiaeThresh=10, invertImage=False, showResult=False, saveResult=False)
+        Terminations, Bifurcations = ffe.extract_minutiae_features(fingerprint, spuriousMinutiaeThresh=10, invertImage=False, showResult=False, saveResult=True)
         
-        print("Broj terminacija: {}, broj bifurkacija: {}".format(len(FeaturesTerminations), len(FeaturesBifurcations)))
+        save_extracted_fingerprint(features_fingerprints_folder, labels, counter)
+        counter += 1
 
-        max_len = max(len(FeaturesTerminations), len(FeaturesBifurcations))
-        pad_zeros = np.zeros(max_len)
+        fingerprint_features = []
+        for termination in Terminations:
+            orientation = termination.Orientation[0]
+            loc_x = termination.locX
+            loc_y = termination.locY
 
-        feature = np.concatenate([
-            np.concatenate([FeaturesTerminations, pad_zeros]),
-            np.concatenate([FeaturesBifurcations, pad_zeros])
-        ])
-        features.append(feature)
+            fingerprint_features.extend([orientation, loc_x, loc_y])
+
+        pad_length = 300 - len(fingerprint_features)
+        fingerprint_features += [0] * pad_length
+
+        print(labels[counter-1])
+        print(fingerprint_features)
+
+
+        features.append(fingerprint_features)
+    return features
+
+
+def main():
+    fingerprints_folder = './Fingerprints_DB'
+    processed_fingerprints_folder = './Processed_Fingerprints'
+    features_fingerprints_folder = './Features_Processed_Fingerprints'
+
+    if not os.path.exists(fingerprints_folder):
+        print("Fingerprint database does not exist.")
+        return
+    
+    create_folders(processed_fingerprints_folder,features_fingerprints_folder)
+
+    fingerprints, labels = fingerprints_load(fingerprints_folder,processed_fingerprints_folder)
+    #processed_images = np.asarray([np.array(im).flatten() for im in fingerprints])
+    #features = preprocessing.normalize(processed_images, norm='l2')
+
+    features = extract_features(fingerprints, labels, features_fingerprints_folder)
 
     features_train, features_test, labels_train, labels_test = train_test_split(features, labels, test_size=0.2, random_state=42)
 
-    model = SVC(kernel='linear', C=1.0)
-    model.fit(features_train, labels_train)
-
-    labels_pred = model.predict(features_test)
+    clf = OneVsRestClassifier(svm.SVC(kernel='rbf', C=1.0, gamma=0.9, decision_function_shape='ovr'))
+    clf.fit(features_train, labels_train)
+    labels_pred = clf.predict(features_test)
 
     accuracy = accuracy_score(labels_test, labels_pred)
     print("Točnost modela: {:.2f}%".format(accuracy * 100))

@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn import preprocessing, svm
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix, accuracy_score
+from sklearn.metrics import accuracy_score
 
 def save_processed_image(fingerprint_image, fingerprint_label, proc_fingerprints_source):
     cv2.imwrite(os.path.join(proc_fingerprints_source, fingerprint_label), fingerprint_image)
@@ -45,25 +45,20 @@ def main():
     os.makedirs(proc_fingerprints_source)
 
     fingerprints, labels = fingerprints_load(fingerprints_source, proc_fingerprints_source)
-    #norm_fingerprints = preprocessing.normalize(fingerprints, norm='l2')
+    norm_fingerprints = preprocessing.normalize(fingerprints, norm='l2')
 
-    fingerprints_train, fingerprints_test, labels_train, labels_test = train_test_split(fingerprints, labels, test_size=0.2, random_state=42)
+    fingerprints_train, fingerprints_test, labels_train, labels_test = train_test_split(norm_fingerprints, labels, test_size=0.25, random_state=42)
 
     model = OneVsRestClassifier(svm.SVC(kernel='rbf', C=10.0, gamma=0.9, decision_function_shape='ovr'))
     model.fit(fingerprints_train, labels_train)
 
     labels_pred = model.predict(fingerprints_test)
 
+    print(labels_pred)
+    print(labels_test)
+
     accuracy = accuracy_score(labels_test, labels_pred)
     print("Accuracy: {:.2f}%".format(accuracy * 100))
-
-    cm = confusion_matrix(labels_test, labels_pred)
-    epsilon = 1e-7
-    FAR = cm[0, 1] / (cm[0, 0] + cm[0, 1] + epsilon)
-    FRR = cm[1, 0] / (cm[1, 0] + cm[1, 1] + epsilon)
-
-    print("False Acceptance Rate (FAR): {:.2f}%".format(FAR * 100))
-    print("False Rejection Rate (FRR): {:.2f}%".format(FRR * 100))
 
 if __name__ == "__main__":
     main()
